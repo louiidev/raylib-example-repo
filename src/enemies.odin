@@ -27,6 +27,31 @@ get_enemy_spawn_timer :: proc(type: EnemyType) -> f32 {
 		return 0.5
 	}
 
-	return 0
+	return 0.5
 
 }
+
+
+get_enemy_speed :: proc(type: EnemyType) -> f32 {
+
+	switch type {
+	case .crawler:
+		return 5
+	}
+
+	return 1
+
+}
+
+
+get_enemy_health :: proc(type: EnemyType) -> int {
+
+	switch type {
+	case .crawler:
+		return 2
+	}
+
+	return 1
+
+}
+

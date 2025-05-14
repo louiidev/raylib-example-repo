@@ -322,7 +322,7 @@ render_frame :: proc() {
 	}
 
 	rl.EndTextureMode()
-	// rl.BeginShaderMode(screen_shader)
+	rl.BeginShaderMode(screen_shader)
 	rl.DrawTexturePro(
 		screen_render_target.texture,
 		{0, 0, auto_cast screen_render_target.texture.width, auto_cast -screen_render_target.texture.height},
@@ -338,7 +338,7 @@ render_frame :: proc() {
 	draw_call.outline_color = { 0.0, 1.0, 1.0, 1.0 }
 	draw_call.size = {150, 150}
 
-	// rl.EndShaderMode()
+	rl.EndShaderMode()
 	clear_draw_frame()
 
 }

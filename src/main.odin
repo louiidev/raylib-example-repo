@@ -20,6 +20,7 @@ package main
 import "core:fmt"
 import "core:math"
 import "core:math/rand"
+import "core:math/linalg"
 import "core:mem"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
@@ -53,6 +54,23 @@ InGameState :: enum {
 }
 
 
+PopupText :: struct {
+	position:   Vector2,
+	dmg_amount: int,
+	alpha:      int,
+	active:     bool,
+}
+
+
+Particle :: struct {
+	position:      Vector2,
+	active:        bool,
+	atlas_anim:    Animation_Name,
+	current_frame: Texture_Name,
+	timer:         f32,
+}
+
+
 Game :: struct {
 	world_time_elapsed:                      f32,
 	ticks:                                   u64,
@@ -66,6 +84,8 @@ Game :: struct {
 	player_base_grid_position:               Vector2Int,
 	player_health:                           int,
 	draw_card_cost:                          int,
+	popup_text:                              [dynamic]PopupText,
+	sprite_particle:                         [dynamic]Particle,
 
 	// card stuff
 	gold:                                    int,
@@ -216,13 +236,16 @@ update_game :: proc() {
 		   {200, 70},
 		   to_c_string(fmt.tprintf("Draw card $%d", game.draw_card_cost)),
 		   32,
-		   game.in_game_state != .CardSelect,
-		   game.in_game_state == .InBattle || game.gold <= 0,
+		   game.in_game_state != .CardSelect || game.gold < game.draw_card_cost,
+		   false,
 		   6.0,
 	   ) {
 
-		game.in_game_state = .InBattle
-		game.ux_state = {}
+		game.draw_card_cost += 1
+		game.gold -= game.draw_card_cost
+		card: Card
+		card.type = .Warrior
+		append(&game.hand, card)
 	}
 
 
@@ -442,8 +465,8 @@ update_game :: proc() {
 				dx := enemy.target_position.x - enemy.position.x
 				dy := enemy.target_position.y - enemy.position.y
 
-				enemy.position.x += dx * dt * 10
-				enemy.position.y += dy * dt * 10
+				enemy.position.x += dx * dt * enemy.speed
+				enemy.position.y += dy * dt * enemy.speed
 				// animate_v2_to_target(&enemy.position, enemy.target_position, dt, 10.0)
 
 				close :=
@@ -476,6 +499,18 @@ update_game :: proc() {
 
 				draw_sprite(enemy.position, .Enemies, {16, 16})
 
+
+				if enemy.health < enemy.max_health {
+					bar_size: Vector2 = {18, 2}
+					draw_rect(enemy.position - {0, 10}, bar_size + {2, 2}, rl.BLACK)
+					draw_rect(enemy.position - {0, 10}, bar_size, rl.WHITE)
+					draw_rect(
+						enemy.position - {bar_size.x * 0.5, 10},
+						{bar_size.x * f32(enemy.health) / f32(enemy.max_health), bar_size.y},
+						rl.RED,
+						.center_left,
+					)
+				}
 			}
 		}
 
@@ -532,10 +567,16 @@ update_game :: proc() {
 									   ) {
 										ent.attack_cooldown_time = ATTACK_COOLDOWN
 										enemy.health -= ent.attack_amount
-										ent.attack_target_pos = grid_to_world_pos(
-											enemy.grid_position,
-										)
+										ent.attack_target_direction = linalg.normalize(enemy.position - ent.position)
 										ent.animation_state = .Attacking
+										ent.flipped = enemy.position.x < ent.position.x
+
+										popup_txt: PopupText
+										popup_txt.position = enemy.position
+										popup_txt.alpha = 255
+										popup_txt.active = true
+										popup_txt.dmg_amount = ent.attack_amount
+										append(&game.popup_text, popup_txt)
 										break loop
 									}
 								}
@@ -548,53 +589,54 @@ update_game :: proc() {
 
 				color := rl.WHITE
 
-				
 
-				if game.in_game_state ==.InBattle {
+				if game.in_game_state == .InBattle {
 					switch ent.animation_state {
-						case .Attacking:
-							is_target_axis_x := ent.position.x != ent.attack_target_pos.x
-							if is_target_axis_x {
-								if animate_to_target_f32(
-									&ent.position.x,
-									ent.attack_target_pos.x,
-									dt,
-									40.0,
-								) {
-									ent.animation_state = .Idle
-								}
-							} else {
-								if animate_to_target_f32(
-									&ent.position.y,
-									ent.attack_target_pos.y,
-									dt,
-									40.0,
-								) {
-									ent.animation_state = .Idle
-								}
+					case .Attacking:
+						is_target_axis_x := ent.position.x != ent.attack_target_direction.x
+						if is_target_axis_x {
+							if animate_to_target_f32(
+								&ent.position.x,
+								ent.position.x + ent.attack_target_direction.x * 10,
+								dt,
+								10.0,
+								30,
+							) {
+								ent.animation_state = .Idle
 							}
-						case .Idle:
-							if grid_to_world_pos(ent.grid_position) + get_tile_placement_pos(ent.card_type) != ent.position {
-								animate_v2_to_target(
-									&ent.position,
-									grid_to_world_pos(ent.grid_position) + get_tile_placement_pos(ent.card_type),
-									dt,
-									20.0,
-								)
+						} else {
+							if animate_to_target_f32(
+								&ent.position.y,
+								ent.position.x + ent.attack_target_direction.y * 10,
+								dt,
+								10.0,
+								30,
+							) {
+								ent.animation_state = .Idle
 							}
 						}
+					case .Idle:
+						if grid_to_world_pos(ent.grid_position) +
+							   get_tile_placement_pos(ent.card_type) !=
+						   ent.position {
+							animate_v2_to_target(
+								&ent.position,
+								grid_to_world_pos(ent.grid_position) +
+								get_tile_placement_pos(ent.card_type),
+								dt,
+								5.0,
+							)
+						}
+					}
 				}
-			
+
 
 				if game.in_game_state == .CardSelect && ent.movable {
 					hover := false
 					if mouse_tile_grid_pos == ent.grid_position {
 						hover = true
-						color = rl.RED
-
 						if IsMouseButtonPressed(.LEFT) {
 							capture_mouse_pressed(.LEFT)
-
 							game.selected_entity_index = i
 						}
 					}
@@ -627,7 +669,9 @@ update_game :: proc() {
 						}
 
 						if !game.can_place_selected_entity || !can_place {
-							color = rl.RED
+							if ent.grid_position != world_to_grid_pos(ent.position) {
+								color = rl.RED
+							}
 						}
 
 						if IsMouseButtonReleased(.LEFT) {
@@ -641,6 +685,7 @@ update_game :: proc() {
 
 								old_tile.card_type = .nil
 								ent.grid_position = mouse_tile_grid_pos
+								ent.position = grid_to_world_pos(ent.grid_position)
 								new_tile.card_type = ent.card_type
 							}
 
@@ -717,6 +762,66 @@ update_game :: proc() {
 		case .fade_out:
 
 		}
+
+	}
+
+	// @particles
+
+	{
+		for &p in game.sprite_particle {
+
+
+			p.timer -= dt
+
+
+			if p.timer <= 0 {
+				p.current_frame = Texture_Name(int(p.current_frame) + 1)
+				anim := atlas_animations[p.atlas_anim]
+
+				if p.current_frame > anim.last_frame {
+					p.active = false
+				} else {
+					p.timer = atlas_textures[p.current_frame].duration
+				}
+
+
+			}
+			
+
+			if !p.active {
+				continue
+			}
+
+			draw_sprite(p.position, p.current_frame, atlas_textures[p.current_frame].document_size)
+		}
+	}
+
+
+	// @POPUP TEXT
+
+	{
+		set_z_layer(.game_play)
+		for &text in game.popup_text {
+			color := rl.WHITE
+			log(text.alpha)
+			if text.alpha <= 0 {
+				text.alpha = 0
+				text.active = false
+			}
+			color.a = auto_cast math.clamp(text.alpha + 100, 50, 255)
+			text.position.y -= 15 * dt
+			text.alpha -= 2
+
+			draw_text(
+				text.position,
+				to_c_string(fmt.tprintf("%d", text.dmg_amount)),
+				8,
+				color,
+				.center_center,
+				1.0,
+			)
+		}
+
 
 	}
 
@@ -837,6 +942,7 @@ update_game :: proc() {
 
 	}
 
+
 	// @PLACING CARDS
 	// @SELECTED CARD
 	{
@@ -928,9 +1034,11 @@ update_game :: proc() {
 					ent.active = true
 					ent.card_type = card.type
 					ent.grid_position = mouse_tile_grid_pos
-					ent.attack_amount = 2
+					ent.attack_amount = 1
 					ent.range = get_card_range(card.type)
-					ent.position = grid_to_world_pos(ent.grid_position) + get_tile_placement_pos(ent.card_type)
+					ent.position =
+						grid_to_world_pos(ent.grid_position) +
+						get_tile_placement_pos(ent.card_type)
 					if ent.range > 0 {
 						found, pos := find_closest_path_to_entity(mouse_tile_grid_pos)
 						if found {
@@ -944,6 +1052,9 @@ update_game :: proc() {
 					ent.movable = get_card_movable(card.type)
 					ent.ent_type = get_card_ent_type(card.type)
 					append(&game.entities, ent)
+
+					p: Particle = particle_create(.Placement_Particles, ent.position + {0, 5})
+					append(&game.sprite_particle, p)
 				} else if tile.card_type != .nil && action_type == .Action {
 					ordered_remove(&game.hand, game.selected_card_index)
 				}
@@ -952,6 +1063,8 @@ update_game :: proc() {
 		}
 	}
 
+
+	cleanup_base_entity(&game.popup_text)
 }
 
 
@@ -996,15 +1109,19 @@ on_round_start :: proc() {
 
 		for enemy_i: i32 = 0; enemy_i < enemies_per_path; enemy_i += 1 {
 			enemy: Enemy
-			enemy.health = 1
-			enemy.max_health = 1
+			enemy.health = get_enemy_health(enemy.type)
+			enemy.max_health = get_enemy_health(enemy.type)
 			enemy.enemy_spawn_timer = get_enemy_spawn_timer(enemy.type)
+			enemy.speed = get_enemy_speed(enemy.type)
 			append(&node_path.enemies, enemy)
 		}
 
 		append(&game.enemy_paths, node_path)
 
-
+		for &ent in game.entities {
+			ent.position =
+				grid_to_world_pos(ent.grid_position) + get_tile_placement_pos(ent.card_type)
+		}
 	}
 
 
@@ -1021,5 +1138,18 @@ on_round_start :: proc() {
 	// provide resources
 	for tile in game.tiles {
 		generate_resource(tile.card_type)
+	}
+}
+
+
+particle_create :: proc(anim: Animation_Name, position: Vector2) -> Particle {
+	a := atlas_animations[anim]
+
+	return {
+		current_frame = a.first_frame,
+		atlas_anim = anim,
+		timer = atlas_textures[a.first_frame].duration,
+		active = true,
+		position = position,
 	}
 }

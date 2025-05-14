@@ -18,7 +18,7 @@ Entity :: struct {
 	active:                 bool,
 	attack_amount:          int,
 	attack_cooldown_time:   f32,
-	attack_target_pos: Vector2,
+	attack_target_direction: Vector2,
 	card_type:              CardType,
 	grid_position:          Vector2Int,
 	movable:                bool,

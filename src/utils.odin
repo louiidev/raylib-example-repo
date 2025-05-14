@@ -1,6 +1,7 @@
 package main
 
 import "core:math"
+import "base:intrinsics"
 import rl "vendor:raylib"
 
 Pivot :: enum {
@@ -209,4 +210,14 @@ find_closest_path_to_entity :: proc(ent_position: Vector2Int) -> (bool, Vector2I
 	}
 
 	return found_path, closest
+}
+
+
+cleanup_base_entity :: proc(data: ^[dynamic]$T) where intrinsics.type_is_struct(T) {
+	// Iterate in reverse order to avoid issues when removing items
+	for i := len(data) - 1; i >= 0; i -= 1 {
+		if !data[i].active {
+			ordered_remove(data, i)
+		}
+	}
 }
