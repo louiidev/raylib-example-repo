@@ -1,7 +1,7 @@
 package main
 
-import "core:math"
 import "base:intrinsics"
+import "core:math"
 import rl "vendor:raylib"
 
 Pivot :: enum {
@@ -129,13 +129,13 @@ get_card_viewport_scale :: proc() -> f32 {
 }
 
 get_pixel_screen_size :: proc() -> Vector2 {
-	scale:= get_viewport_scale()
+	scale := get_viewport_scale()
 
 	return {f32(rl.GetScreenWidth()) * scale, PIXEL_WINDOW_HEIGHT}
 }
 
 get_card_screen_size :: proc() -> Vector2 {
-	scale:= get_card_viewport_scale()
+	scale := get_card_viewport_scale()
 
 	return {f32(rl.GetScreenWidth()) * scale, SCREEN_HEIGHT}
 }
@@ -179,22 +179,31 @@ to_c_string :: proc(str: string) -> cstring {
 	return c_string
 }
 
+import "core:fmt"
+format_cstring :: proc(str: string, args: ..any) -> cstring {
+	return to_c_string(fmt.tprintf(str, args))
+}
 
 normalize_color :: proc(rl_color: rl.Color) -> Vector4 {
-	return { f32(rl_color.r) / 255, f32(rl_color.g) / 255, f32(rl_color.b) / 255, f32(rl_color.a) / 255}
+	return {
+		f32(rl_color.r) / 255,
+		f32(rl_color.g) / 255,
+		f32(rl_color.b) / 255,
+		f32(rl_color.a) / 255,
+	}
 }
 
 
-find_closest_path_to_entity :: proc(ent_position: Vector2Int) -> (bool, Vector2Int){
+find_closest_path_to_entity :: proc(ent_position: Vector2Int) -> (bool, Vector2Int) {
 	closest: Vector2Int = {}
-	found_path:= false 
-	dist:f32= 1000000000000
+	found_path := false
+	dist: f32 = 1000000000000
 	for paths in game.enemy_paths {
 		for path in paths.path {
 			if manhattan_dist(path, ent_position) <= dist {
 
 				if dist == manhattan_dist(path, ent_position) {
-					if path.y == ent_position.y {	
+					if path.y == ent_position.y {
 						closest = path
 						found_path = true
 						dist = manhattan_dist(path, ent_position)
@@ -205,7 +214,7 @@ find_closest_path_to_entity :: proc(ent_position: Vector2Int) -> (bool, Vector2I
 					dist = manhattan_dist(path, ent_position)
 				}
 
-			} 
+			}
 		}
 	}
 

@@ -54,4 +54,3 @@ get_enemy_health :: proc(type: EnemyType) -> int {
 	return 1
 
 }
-

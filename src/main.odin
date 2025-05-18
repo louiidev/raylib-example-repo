@@ -19,8 +19,8 @@ package main
 
 import "core:fmt"
 import "core:math"
-import "core:math/rand"
 import "core:math/linalg"
+import "core:math/rand"
 import "core:mem"
 import rl "vendor:raylib"
 import rlgl "vendor:raylib/rlgl"
@@ -84,8 +84,13 @@ Game :: struct {
 	player_base_grid_position:               Vector2Int,
 	player_health:                           int,
 	draw_card_cost:                          int,
+	reroll_shop_cost:                        int,
 	popup_text:                              [dynamic]PopupText,
 	sprite_particle:                         [dynamic]Particle,
+
+
+	// Shop
+	shop_items:                              [5]ShopItem,
 
 	// card stuff
 	gold:                                    int,
@@ -104,7 +109,7 @@ Game :: struct {
 	// Enemy stuff
 	enemy_paths:                             [dynamic]NodePath,
 
-	// UX 
+	// UX
 	using ux_state:                          struct {
 		ux_alpha:      f32,
 		ux_y_offset:   f32,
@@ -200,17 +205,77 @@ update_game :: proc() {
 	screen_height := f32(rl.GetScreenHeight())
 
 
+	if game.in_game_state == .Shop {
+		if IsKeyReleased(.ESCAPE) {
+			game.in_game_state = .CardSelect
+			capture_key_released(.ESCAPE)
+		}
+
+		draw_rect(
+			{screen_width * 0.5, screen_height * 0.5},
+			{screen_width, screen_height},
+			{0, 0, 0, 100},
+		)
+
+		shop_item_width: f32 = 200
+		padding: f32 = 10
+		item_position := Vector2 {
+			screen_width * 0.5 -
+			((shop_item_width + padding) * len(game.shop_items) * 0.5) -
+			0.5 * (shop_item_width + padding),
+			screen_height * 0.5,
+		}
+
+
+		for &item in game.shop_items {
+			item_position.x += shop_item_width + padding
+
+			draw_text(item_position - {0, 80}, get_shop_item_name(item))
+
+			draw_rect(item_position, {84, 84}, rl.BLACK)
+			draw_rect(item_position, {70, 70}, rl.WHITE)
+			draw_sprite(item_position, get_shop_item_texture_name(item), {64, 64})
+
+			if draw_button(
+				item_position + {0, 100},
+				{shop_item_width - padding * 2, 70},
+				to_c_string(fmt.tprintf("Buy $:%d", item.cost)),
+				24,
+				game.gold < item.cost || item.purchased,
+				false,
+				6.0,
+			) {
+				item.purchased = true
+			}
+		}
+
+
+		if draw_button(
+			{screen_width * 0.5, screen_height * 0.5 + 250},
+			{160, 80},
+			to_c_string(fmt.tprintf("Reroll $:%d", game.reroll_shop_cost)),
+			14,
+			game.gold < game.reroll_shop_cost,
+			false,
+			4.0,
+		) {
+			game.reroll_shop_cost += 1
+			generate_shop_items()
+		}
+	}
+
+
 	if game.in_game_state != .InBattle &&
 	   draw_button(
 		   {150, screen_height - 45},
 		   {200, 70},
-		   "Shop",
+		   game.in_game_state == .Shop ? "Exit" : "Shop",
 		   32,
-		   game.in_game_state != .CardSelect,
-		   game.in_game_state == .Shop,
+		   game.in_game_state == .InBattle,
+		   false,
 		   6.0,
 	   ) {
-		game.in_game_state = .Shop
+		game.in_game_state = game.in_game_state == .Shop ? .CardSelect : .Shop
 		game.ux_state = {}
 
 	}
@@ -567,7 +632,9 @@ update_game :: proc() {
 									   ) {
 										ent.attack_cooldown_time = ATTACK_COOLDOWN
 										enemy.health -= ent.attack_amount
-										ent.attack_target_direction = linalg.normalize(enemy.position - ent.position)
+										ent.attack_target_direction = linalg.normalize(
+											enemy.position - ent.position,
+										)
 										ent.animation_state = .Attacking
 										ent.flipped = enemy.position.x < ent.position.x
 
@@ -786,7 +853,7 @@ update_game :: proc() {
 
 
 			}
-			
+
 
 			if !p.active {
 				continue
@@ -891,7 +958,14 @@ update_game :: proc() {
 			} else if hover {
 				outline_size = 30.0
 				outline_color = rl.BLUE
+			}
 
+			if game.selected_card_index == i {
+				outline_color = rl.GREEN
+				draw_sprite(position, .Card_Highlight, {CARD_WIDTH, CARD_HEIGHT}, outline_color)
+			} else if hover {
+				outline_color = rl.BLUE
+				draw_sprite(position, .Card_Highlight, {CARD_WIDTH, CARD_HEIGHT}, outline_color)
 			}
 
 			draw_sprite(
@@ -902,8 +976,6 @@ update_game :: proc() {
 				.center_center,
 				{},
 				1.0,
-				outline_size,
-				outline_color,
 			)
 
 			draw_sprite(position - {0, 40}, get_card_image_id(card.type), {64, 64})
@@ -1069,6 +1141,8 @@ update_game :: proc() {
 
 
 // @round_start
+// @setup_run
+// @start_run
 on_round_start :: proc() {
 	game.gold += 10
 	paths := rand.int31_max(2) + 2
@@ -1122,6 +1196,9 @@ on_round_start :: proc() {
 			ent.position =
 				grid_to_world_pos(ent.grid_position) + get_tile_placement_pos(ent.card_type)
 		}
+
+
+		generate_shop_items()
 	}
 
 

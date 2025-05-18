@@ -8,11 +8,11 @@ KeyboardKey :: rl.KeyboardKey
 Inputs :: struct {
 	// consumed this frame
 	mouse_down_consumed, mouse_pressed_consumed, mouse_released_consumed, mouse_up_consumed: [MouseButton]bool,
-	key_down_consumed, key_pressed_consumed, key_released_consumed, key_up_consumed:         [MouseButton]bool,
+	key_down_consumed, key_pressed_consumed, key_released_consumed, key_up_consumed:         #sparse[KeyboardKey]bool,
 }
 inputs: Inputs
 
-// IsKeyPressed   	   :: proc(key: KeyboardKey) -> bool 
+// IsKeyPressed   	   :: proc(key: KeyboardKey) -> bool
 // IsKeyPressedRepeat :: proc(key: KeyboardKey) -> bool --- // Check if a key has been pressed again
 // IsKeyDown      	   :: proc(key: KeyboardKey) -> bool --- // Detect if a key is being pressed
 // IsKeyReleased  	   :: proc(key: KeyboardKey) -> bool --- // Detect if a key has been released once
@@ -37,6 +37,17 @@ inputs: Inputs
 
 
 // Input-related functions: mouse
+//
+//
+
+
+IsKeyReleased :: proc(key: KeyboardKey) -> bool {
+	if inputs.key_pressed_consumed[key] {
+		return false
+	}
+
+	return rl.IsKeyPressed(key)
+}
 
 IsMouseButtonPressed :: proc(button: MouseButton) -> bool {
 	if inputs.mouse_pressed_consumed[button] {
@@ -86,6 +97,9 @@ capture_mouse_up :: proc(button: MouseButton) {
 	inputs.mouse_up_consumed[button] = true
 }
 
+capture_key_released :: proc(key: KeyboardKey) {
+	inputs.key_released_consumed[key] = true
+}
 
 // IsKeyPressed :: proc(key: KeyboardKey) -> bool
 // IsKeyPressedRepeat :: proc(key: KeyboardKey) -> bool --- // Check if a key has been pressed again

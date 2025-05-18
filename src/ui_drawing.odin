@@ -301,7 +301,7 @@ draw_button :: proc(
 
 
 	if disabled {
-		color = rl.BLACK
+		color = rl.GRAY
 	}
 
 	if selected {
