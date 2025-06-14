@@ -22,13 +22,15 @@ Tile :: struct {
 
 
 get_card_type_g_cost :: proc(type: CardType) -> int {
-	switch type {
+	#partial switch type {
 	case .nil:
 		return 0
-	case .House:
+	case .House, .AttackTower:
 		return 40
 	case .Warrior:
 		return 1
+	case .PoisionTile:
+		return 0
 	}
 
 	return 0

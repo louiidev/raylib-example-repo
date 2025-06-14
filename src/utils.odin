@@ -158,13 +158,17 @@ get_mouse_position :: proc() -> Vector2 {
 }
 
 
-get_sprite_rect :: proc(texture_name: Texture_Name, sprite_index: Vector2Int, size: f32) -> Rect {
+get_sprite_rect :: proc(
+	texture_name: Texture_Name,
+	sprite_index: Vector2Int,
+	size: Vector2,
+) -> Rect {
 	rect := atlas_textures[texture_name].rect
 
-	rect.width = size
-	rect.height = size
-	rect.x += f32(sprite_index.x) * size
-	rect.y += f32(sprite_index.y) * size
+	rect.width = size.x
+	rect.height = size.y
+	rect.x += f32(sprite_index.x) * size.x
+	rect.y += f32(sprite_index.y) * size.y
 
 	rect.x -= 1
 	rect.y -= 1
@@ -173,8 +177,8 @@ get_sprite_rect :: proc(texture_name: Texture_Name, sprite_index: Vector2Int, si
 }
 
 import "core:strings"
-to_c_string :: proc(str: string) -> cstring {
-	c_string := strings.clone_to_cstring(str, temp_allocator())
+to_c_string :: proc(str: string, allocator := context.temp_allocator) -> cstring {
+	c_string := strings.clone_to_cstring(str, allocator)
 
 	return c_string
 }
@@ -229,4 +233,73 @@ cleanup_base_entity :: proc(data: ^[dynamic]$T) where intrinsics.type_is_struct(
 			ordered_remove(data, i)
 		}
 	}
+}
+
+
+sine_breathe_alpha :: proc(p: $T) -> T where intrinsics.type_is_float(T) {
+	return (math.sin((p - .25) * 2.0 * math.PI) / 2.0) + 0.5
+}
+
+cos_breathe_alpha :: proc(p: $T) -> T where intrinsics.type_is_float(T) {
+	return (math.cos((p - .25) * 2.0 * math.PI) / 2.0) + 0.5
+}
+
+
+run_every_seconds :: proc(s: f32) -> bool {
+
+	test := f32(game.ticks) / f32(ticks_per_second)
+
+	interval: f32 = s * f32(ticks_per_second)
+
+	if interval < 1.0 {
+		// 	log.error("run_every_seconds is ticking each frame, can't go faster than this")
+	}
+
+	run := (game.ticks % u64(interval)) == 0
+	return run
+}
+
+
+import "core:math/rand"
+random_ranged_vector2 :: proc(min: Vector2, max: Vector2) -> Vector2 {
+	x := rand.float32_range(min.x, max.x)
+	y := rand.float32_range(min.y, max.y)
+
+
+	return {x, y}
+}
+
+
+create_popup :: proc(text_value: cstring, position: Vector2, color := rl.WHITE) {
+	popup: PopupText
+	popup.active = true
+	popup.value = text_value
+	popup.position = position
+	popup.alpha = 255
+	popup.color = color
+
+
+	append(&game.popup_text, popup)
+}
+
+
+create_money_popup :: proc(value: int, position: Vector2) {
+	cstring_value: cstring = to_c_string(
+		fmt.tprintf((value > 0 ? "+$%d" : "-$%d"), math.abs(value)),
+		context.allocator,
+	)
+
+	create_popup(cstring_value, position, {255, 215, 105, 255})
+}
+
+create_dmg_popup :: proc(value: int, position: Vector2) {
+	cstring_value: cstring = to_c_string(fmt.tprintf("-%d", value), context.allocator)
+
+	create_popup(cstring_value, position, rl.WHITE)
+}
+
+create_player_dmg_popup :: proc(value: int, position: Vector2) {
+	cstring_value: cstring = to_c_string(fmt.tprintf("-%d", value), context.allocator)
+
+	create_popup(cstring_value, position, rl.RED)
 }

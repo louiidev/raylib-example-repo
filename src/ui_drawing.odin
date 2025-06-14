@@ -205,63 +205,68 @@ import rl "vendor:raylib"
 // 	return pressed
 // }
 
-
-// image_button :: proc(
-// 	position: Vector2,
-// 	text: string,
-// 	font_size: f32,
-// 	id: UiID,
-// 	size: Vector2 = {60, 24},
-// 	disabled: bool = false,
-// 	color_override := rl.WHITE,
-// 	border_override := rl.BLACK,
-// ) -> bool {
-// 	xform := transform_2d(position)
-// 	x_frame := 0
-// 	hover_position: Vector2 = {0, 0}
-// 	color := BUTTON_COLOR
-// 	if !disabled && aabb_contains(position, size, mouse_world_position) {
-// 		ui_state.hover_id = id
-// 		x_frame = 1
-// 		hover_position.y += 5
-// 	}
-// 	if !disabled && inputs.mouse_down[sapp.Mousebutton.LEFT] && ui_state.hover_id == id {
-// 		ui_state.down_clicked_id = id
-// 		hover_position.y -= 5
-// 	}
+UiID :: u32
 
 
-// 	if disabled {
-// 		x_frame = 3
-// 	}
+last_pressed_id: UiID
+image_button :: proc(
+	position: Vector2,
+	text: cstring,
+	font_size: f32,
+	id: UiID,
+	size: Vector2 = {60 * 4, 24 * 4},
+	disabled: bool = false,
+	color_override := rl.WHITE,
+	border_override := rl.BLACK,
+) -> bool {
+	log(size)
 
-// 	pressed := false
+	x_frame := 0
+	hover_position: Vector2 = {0, 0}
+	color := rl.WHITE
+	hover := false
+	if !disabled && aabb_center_contains(position, size, get_mouse_position()) {
+		hover = true
+		x_frame = 1
+		hover_position.y += 5
+	}
+	if !disabled && IsMouseButtonDown(.LEFT) && hover {
+		hover_position.y -= 5
+		last_pressed_id = id
+	}
 
-// 	if !disabled &&
-// 	   ui_state.hover_id == id &&
-// 	   inputs.mouse_just_released[sapp.Mousebutton.LEFT] &&
-// 	   ui_state.down_clicked_id == id {
-// 		pressed = true
-// 		consume_mouse_just_pressed(.LEFT)
-// 	}
+
+	if disabled {
+		x_frame = 3
+	}
+
+	pressed := false
+
+	if !disabled && hover && IsMouseButtonPressed(.LEFT) && last_pressed_id == id {
+		pressed = true
+		last_pressed_id = 0
+	}
 
 
-// 	uv := get_frame_uvs(.buttons, {x_frame, 0}, {60, 24})
-// 	shadow_uv := get_frame_uvs(.buttons, {4, 0}, {60, 24})
-// 	draw_quad_center_xform(
-// 		xform * transform_2d({-5, -5}),
-// 		size,
-// 		.buttons,
-// 		shadow_uv,
-// 		color_override,
-// 	)
-// 	draw_quad_center_xform(
-// 		xform * transform_2d(hover_position),
-// 		size,
-// 		.buttons,
-// 		uv,
-// 		color_override,
-// 	)
+	uv := get_sprite_rect(.Buttons, {x_frame, 0}, Vector2{60, 24})
+	shadow_uv := get_sprite_rect(.Buttons, {4, 0}, Vector2{60, 24})
+
+
+	draw_sprite(position + {-5, -5}, .Buttons, size, color_override, .center_center, shadow_uv)
+	draw_sprite(position + hover_position, .Buttons, size, color_override, .center_center, uv)
+
+	draw_text(
+		position + hover_position,
+		text,
+		font_size,
+		color_override,
+		.center_center,
+		4.0,
+		border_override,
+	)
+
+	return pressed
+}
 
 
 // 	draw_text_outlined_center(
@@ -315,11 +320,44 @@ draw_button :: proc(
 		capture_mouse_released(.LEFT)
 	}
 	if border_size > 0 {
-		draw_rect(position, size + border_size * 2, rl.BLACK)
+		draw_rect(position, size + border_size * 2, rl.GRAY)
 	}
 	draw_rect(position, size, color)
 	draw_text(position, text, 32, rl.BLACK)
 
 
 	return pressed
+}
+
+
+splash_screen_logic :: proc(dt: f32, next_state: AppState, fade_time: f64) -> rl.Color {
+	if rl.IsKeyPressed(.SPACE) {
+		game.app_state = next_state
+	}
+
+	switch game.ux_anim_state {
+	case .fade_in:
+		reached := animate_to_target_f32(&game.ux_alpha, 1.0, dt, rate = 3.0, good_enough = 0.05)
+		if reached {
+			game.ux_anim_state = .hold
+			game.hold_end_time = app_now() + fade_time
+		}
+	case .hold:
+		if app_now() >= game.hold_end_time {
+			game.ux_anim_state = .fade_out
+		}
+
+
+	case .fade_out:
+		reached := animate_to_target_f32(&game.ux_alpha, 0.0, dt, rate = 5.0, good_enough = 0.05)
+		if reached {
+			game.ux_state = {}
+			game.app_state = next_state
+		}
+	}
+
+	alpha: f32 = 255 * game.ux_alpha
+	color: rl.Color = {255, 255, 255, auto_cast alpha}
+
+	return color
 }

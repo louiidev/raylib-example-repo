@@ -1,5 +1,6 @@
 package main
 
+import "core:slice"
 import rl "vendor:raylib"
 
 
@@ -10,21 +11,31 @@ DrawCallType :: enum {
 }
 
 
+ShaderType :: enum {
+	None,
+	flash_hit,
+}
+
 DrawCall :: struct {
-	type:          DrawCallType,
-	position:      Vector2,
-	scale:         Vector2,
-	rotation:      f32,
-	texture_name:  Texture_Name,
-	color:         rl.Color,
-	source:        rl.Rectangle,
-	size:          Vector2,
-	text:          cstring,
-	font_size:     f32,
-	pivot:         Pivot,
-	rect:          Rect,
-	outline:       f32,
-	outline_color: rl.Color,
+	type:                      DrawCallType,
+	position:                  Vector2,
+	scale:                     Vector2,
+	rotation:                  f32,
+	texture_name:              Texture_Name,
+	color:                     rl.Color,
+	source:                    rl.Rectangle,
+	size:                      Vector2,
+	text:                      cstring,
+	font_size:                 f32,
+	pivot:                     Pivot,
+	rect:                      Rect,
+	outline:                   f32,
+	outline_color:             rl.Color,
+	flipped_x:                 bool,
+	z_index:                   int,
+	shader:                    ShaderType,
+	shader_values:             map[i32]rawptr,
+	shader_uniform_data_types: map[i32]rl.ShaderUniformDataType,
 }
 
 
@@ -71,10 +82,13 @@ screen_shader: rl.Shader
 outline_text_shader: rl.Shader
 
 
+shaders: map[ShaderType]rl.Shader
+
 init_gfx :: proc() {
 	size := get_pixel_screen_size()
 	screen_shader = rl.LoadShader("", "assets/shaders/scanlines.fs")
 	outline_text_shader = rl.LoadShader("", "assets/shaders/outline.fs")
+	shaders[.flash_hit] = rl.LoadShader("", "assets/shaders/flash_hit.fs")
 	game_render_target = rl.LoadRenderTexture(auto_cast size.x, auto_cast size.y)
 	screen_render_target = rl.LoadRenderTexture(SCREEN_WIDTH, SCREEN_HEIGHT)
 	card_render_target = rl.LoadRenderTexture(SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -185,40 +199,40 @@ render_frame :: proc() {
 			)
 
 		}
+		slice.sort_by(layer.draw_calls[:], proc(i, e: DrawCall) -> bool {
+			return i.z_index < e.z_index
+		})
+
 		for draw_call in layer.draw_calls {
-
-			origin := draw_call.size * scale_from_pivot(draw_call.pivot)
-
+			origin := draw_call.size * scale_from_pivot(draw_call.pivot) * draw_call.scale
 
 			src := draw_call.rect
 			src.width = src.width * draw_call.scale.x
 			src.height = src.height * draw_call.scale.y
 			switch draw_call.type {
 			case .Sprite:
-				if draw_call.outline > 0 {
-					outline_color := normalize_color(draw_call.outline_color)
-					outline := draw_call.outline
-					rl.SetShaderValue(
-						outline_text_shader,
-						rl.GetShaderLocation(outline_text_shader, "outlineColor"),
-						&outline_color,
-						.VEC4,
-					)
-					rl.SetShaderValue(
-						outline_text_shader,
-						rl.GetShaderLocation(outline_text_shader, "outlineSize"),
-						&outline,
-						.FLOAT,
-					)
-					rl.BeginShaderMode(outline_text_shader)
+				if draw_call.shader != .None {
+					shader := shaders[draw_call.shader]
 
+
+					for dataLoc in draw_call.shader_values {
+						data := draw_call.shader_values[dataLoc]
+						uniform_value := draw_call.shader_uniform_data_types[dataLoc]
+						rl.SetShaderValue(shader, dataLoc, data, uniform_value)
+					}
+					rl.BeginShaderMode(shader)
 				}
 				rl.DrawTexturePro(
 					atlas,
-					src,
 					{
-						width = draw_call.size.x,
-						height = draw_call.size.y,
+						width = draw_call.flipped_x ? draw_call.rect.width * -1 : draw_call.rect.width,
+						height = draw_call.rect.height,
+						x = draw_call.rect.x,
+						y = draw_call.rect.y,
+					},
+					{
+						width = draw_call.size.x * draw_call.scale.x,
+						height = draw_call.size.y * draw_call.scale.y,
 						x = draw_call.position.x,
 						y = draw_call.position.y,
 					},
@@ -227,10 +241,12 @@ render_frame :: proc() {
 					draw_call.color,
 				)
 
-				if draw_call.outline > 0 {
+				if draw_call.shader != .None {
 					rl.EndShaderMode()
-
+					delete(draw_call.shader_values)
+					delete(draw_call.shader_uniform_data_types)
 				}
+
 			case .Rect:
 				rl.DrawRectanglePro(
 					{
@@ -244,6 +260,7 @@ render_frame :: proc() {
 					draw_call.color,
 				)
 			case .Text:
+				font_size := draw_call.font_size * draw_call.scale.x
 				if draw_call.outline > 0 {
 					rl.DrawTextPro(
 						raylib_font,
@@ -251,7 +268,7 @@ render_frame :: proc() {
 						draw_call.position + {-draw_call.outline, -draw_call.outline},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -261,7 +278,7 @@ render_frame :: proc() {
 						draw_call.position + {-draw_call.outline, draw_call.outline},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -272,7 +289,7 @@ render_frame :: proc() {
 						draw_call.position + {draw_call.outline, -draw_call.outline},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -282,7 +299,7 @@ render_frame :: proc() {
 						draw_call.position + {draw_call.outline, draw_call.outline},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -294,7 +311,7 @@ render_frame :: proc() {
 						draw_call.position + {draw_call.outline, 0},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -304,7 +321,7 @@ render_frame :: proc() {
 						draw_call.position + {0, draw_call.outline},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -314,7 +331,7 @@ render_frame :: proc() {
 						draw_call.position + {-draw_call.outline, 0},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -324,7 +341,7 @@ render_frame :: proc() {
 						draw_call.position + {0, -draw_call.outline},
 						origin,
 						draw_call.rotation,
-						draw_call.font_size,
+						font_size,
 						1.0,
 						draw_call.outline_color,
 					)
@@ -337,7 +354,7 @@ render_frame :: proc() {
 					draw_call.position,
 					origin,
 					draw_call.rotation,
-					draw_call.font_size,
+					font_size,
 					1.0,
 					draw_call.color,
 				)
@@ -382,19 +399,20 @@ draw_sprite :: proc(
 	pivot: Pivot = .center_center,
 	rect := Rect{},
 	scale: Vector2 = {1.0, 1.0},
-	outline: f32 = 0.0,
-	outline_color := rl.BLACK,
-) {
+	flipped_x := false,
+	z_index := 0,
+	rotation: f32 = 0,
+) -> ^DrawCall {
 	draw_call: DrawCall
 	draw_call.position = position
-	draw_call.scale = 1.0
 	draw_call.type = .Sprite
 	draw_call.pivot = pivot
 	draw_call.scale = scale
 	draw_call.color = color
-	draw_call.outline = outline
-	draw_call.outline_color = outline_color
+	draw_call.flipped_x = flipped_x
+	draw_call.rotation = rotation
 
+	draw_call.z_index = z_index + len(draw_frame.layer[draw_frame.active_z_layer].draw_calls)
 	draw_call.texture_name = texture_name
 	if size == {} {
 		draw_call.size = atlas_textures[texture_name].document_size
@@ -410,15 +428,30 @@ draw_sprite :: proc(
 
 	draw_call.color = color
 
-	append_draw_call(draw_call)
+	return append_draw_call(draw_call)
 }
 
+
+set_shader_value :: proc(
+	draw_call: ^DrawCall,
+	uniform_name: cstring,
+	value: rawptr,
+	uniform_type: rl.ShaderUniformDataType,
+) {
+	shader := shaders[draw_call.shader]
+	location := rl.GetShaderLocation(shader, uniform_name)
+	draw_call.shader_values[location] = value
+	draw_call.shader_uniform_data_types[location] = uniform_type
+	assert(location > -1)
+	// rl.SetShaderValue(shader, location, value, uniform_type)
+}
 
 draw_rect :: proc(
 	position: Vector2,
 	size: Vector2,
 	color: rl.Color = rl.WHITE,
 	pivot: Pivot = .center_center,
+	z_index := 0,
 ) {
 	draw_call: DrawCall
 	draw_call.position = position
@@ -427,7 +460,7 @@ draw_rect :: proc(
 	draw_call.size = size
 	draw_call.color = color
 	draw_call.pivot = pivot
-
+	draw_call.z_index = z_index + len(draw_frame.layer[draw_frame.active_z_layer].draw_calls)
 
 	append_draw_call(draw_call)
 }
@@ -441,10 +474,12 @@ draw_text :: proc(
 	pivot: Pivot = .center_center,
 	outline: f32 = 0.0,
 	outline_color := rl.BLACK,
-) {
+	scale := Vector2{1, 1},
+	z_index := 0,
+) -> ^DrawCall {
 	draw_call: DrawCall
 	draw_call.position = position
-	draw_call.scale = 1.0
+	draw_call.scale = scale
 	draw_call.type = .Text
 	draw_call.font_size = font_size
 	draw_call.text = text
@@ -452,7 +487,7 @@ draw_text :: proc(
 	draw_call.pivot = pivot
 	draw_call.outline = outline
 	draw_call.outline_color = outline_color
-
+	draw_call.z_index = z_index + len(draw_frame.layer[draw_frame.active_z_layer].draw_calls)
 
 	draw_call.size = rl.MeasureTextEx(
 		raylib_font,
@@ -461,9 +496,12 @@ draw_text :: proc(
 		1.0,
 	)
 
-	append_draw_call(draw_call)
+	return append_draw_call(draw_call)
 }
 
-append_draw_call :: proc(draw_call: DrawCall) {
+append_draw_call :: proc(draw_call: DrawCall) -> ^DrawCall {
 	append(&draw_frame.layer[draw_frame.active_z_layer].draw_calls, draw_call)
+	return(
+		&draw_frame.layer[draw_frame.active_z_layer].draw_calls[len(draw_frame.layer[draw_frame.active_z_layer].draw_calls) - 1] \
+	)
 }

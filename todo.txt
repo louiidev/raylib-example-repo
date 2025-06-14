@@ -1,0 +1,61 @@
+
+
+1. Sprite particle when player hits enemy
+* - ents not attacking direction properly
+* - animate gold counter and gold at end of round to show player earnt gold from houses etc
+* - enemy death animation
+* - show next round money indicator
+* - squash enemies on hit
+* - particle hit effects
+
+
+DEMO release:
+* - polish attack animations and enemy death animation
+* - add some basic menus for start and options, exit etc
+* - death/ restart
+* - add some different enemy types
+* - add sound fx and background music
+* - have proper items in shop with prices
+* - add some more card content and relics
+* - figure out web build
+
+
+DEMO requirements:
+* - hit effects on enemies
+* - Populate shop
+* - death screen
+* - main menu
+* - option menu
+* - enemy variantions
+* - card upgrades - not needed for demo
+* - deck randomness generation
+* - add sound effects
+* - Relics
+
+
+
+TODO LONG TERM:
+* - to render cards better, at build time create card images with raylib program, create a render texture and save it as an image
+* - cards can be upgraded in the shop
+
+
+IDEAS:
+* - reshuffle hand (costs 3) + 2 each time you do it
+* - poison troops?
+* - troops that can freeze enemies
+* - magic troops that can poison or
+* - Should towers and troops have health?
+
+
+Card IDEAS:
+* - poision plot (when enemies walks on space, apply 3 poision)
+* - static tower shoots arrows
+
+RELIC IDEAS:
+* - static cards cost less to play next to other static items
+* - rerolls cost -1 less
+* - free reroll per turn
+* - extra card per round
+* - static troops have +10% damage
+* - all troops have +5% damage
+* - static cards firerate increase +5%

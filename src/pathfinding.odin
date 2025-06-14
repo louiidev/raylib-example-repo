@@ -10,6 +10,11 @@ manhattan_dist :: proc(a: Vector2Int, b: Vector2Int) -> f32 {
 }
 
 
+euclidean_distance :: proc(a, b: Vector2Int) -> f32 {
+	delta_x :f32 = auto_cast (b.x - a.x)
+	delta_y :f32= auto_cast (b.y - a.y)
+	return math.sqrt(delta_x * delta_x + delta_y * delta_y)
+}
 CardinalDirection :: enum {
 	North,
 	East,
@@ -82,13 +87,21 @@ find_path :: proc(
 			node.processed = false
 
 			for p in game.entities {
-				if p.grid_position == node.position {
+				if p.grid_position == node.position && get_card_type_g_cost(p.card_type) > 0{
 					node.walkable = false
 				}
 			}
 
+
+			for t in game.trees {
+    			if world_to_grid_pos(t.position) == node.position {
+    				node.walkable = false
+    			}
+					}
+
 			if game.selected_card_index > -1 {
-				if node.position == game.selected_card_grid_placement_position {
+			    card_type:= game.hand[game.selected_card_index].type
+				if node.position == game.selected_card_grid_placement_position && get_card_type_g_cost(card_type) > 0{
 					node.walkable = false
 				}
 			}
@@ -159,7 +172,7 @@ find_path :: proc(
 				current_path_tile_pos = current.connection_coord
 			}
 			// Add start node to complete the path
-			// 
+			//
 			return path
 		}
 
